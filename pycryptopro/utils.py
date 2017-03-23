@@ -218,7 +218,7 @@ class Cryptcp(ShellCommand):
 
         self.run_command('-signf', *args, **kwargs)
 
-    def verify(self, sgn_dir, cert_filename, filename, errchain=True):
+    def verify(self, sgn_dir, cert_filename, filename, errchain=True, norev=False):
         """
         Проверяет отделенную электронную подпись.
 
@@ -235,6 +235,9 @@ class Cryptcp(ShellCommand):
             args.append('-errchain')
         else:
             args.append('-nochain')
+
+        if norev:
+            args.append('-norev')
 
         kwargs = {
             'dir': sgn_dir,
