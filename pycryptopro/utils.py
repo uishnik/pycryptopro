@@ -185,28 +185,22 @@ class Cryptcp(ShellCommand):
     def __init__(self, binary='/opt/cprocsp/bin/amd64/cryptcp'):
         self.binary = binary
 
+    def _get_result_code(self, stdout):
+        match = re.search(r'\[(ErrorCode|ResultCode): (.+)\]', stdout)
+        if match:
+            return match.group(2).lower()
+
+        raise ShellCommandError(stdout)
+
     def _parse_response(self, stdout, stderr):
-        if '[ReturnCode: 0]' in stdout:
+        error_code = self._get_result_code(stdout)
+
+        if '0' == error_code or '0x00000000' == error_code:
             return stdout
 
-        match = re.search(r'ErrorCode: (.+)]', stdout)
-        if match:
-            error_code = match.group(1).lower()
-            exception_class = self._get_exception_class(error_code)
-            if exception_class:
-                raise exception_class(stdout)
-
-        raise ShellCommandError(stdout)
-
-    def _get_result_code(self, stdout):
-        if '[ReturnCode: 0]' in stdout:
-            return 0
-
-        match = re.search(r'ErrorCode: (.+)]', stdout)
-        if match:
-            return match.group(1).lower()
-
-        raise ShellCommandError(stdout)
+        exception_class = self._get_exception_class(error_code)
+        if exception_class:
+            raise exception_class(stdout)
 
     def _get_exception_class(self, error_code):
         exception_classes = {
