@@ -5,7 +5,10 @@ import os
 
 from datetime import datetime
 from pycryptopro.exceptions import (
-    ShellCommandError, CertificateChainNotChecked, InvalidSignature, CertificatesNotFound
+    ShellCommandError,
+    CertificateChainNotChecked,
+    InvalidSignature,
+    CertificatesNotFound
 )
 from subprocess import Popen, PIPE
 
@@ -182,18 +185,22 @@ class Cryptcp(ShellCommand):
     def __init__(self, binary='/opt/cprocsp/bin/amd64/cryptcp'):
         self.binary = binary
 
-    def _parse_response(self, stdout, stderr):
-        if '[ReturnCode: 0]' in stdout:
-            return stdout
-
-        match = re.search(r'ErrorCode: (.+)]', stdout)
+    def _get_result_code(self, stdout):
+        match = re.search(r'\[(ErrorCode|ResultCode): (.+)\]', stdout)
         if match:
-            error_code = match.group(1).lower()
-            exception_class = self._get_exception_class(error_code)
-            if exception_class:
-                raise exception_class(stdout)
+            return match.group(2).lower()
 
         raise ShellCommandError(stdout)
+
+    def _parse_response(self, stdout, stderr):
+        error_code = self._get_result_code(stdout)
+
+        if '0' == error_code or '0x00000000' == error_code:
+            return stdout
+
+        exception_class = self._get_exception_class(error_code)
+        if exception_class:
+            raise exception_class(stdout)
 
     def _get_exception_class(self, error_code):
         exception_classes = {
@@ -259,6 +266,41 @@ class Cryptcp(ShellCommand):
         stdout = self.run_command('-vsignf', *args, **kwargs)
         signer_data = self._get_signer_data(stdout)
         return signer_data
+
+    def verifyMessage(self, cert_path, file_path, data_path, errchain=True, norev=False, dn=None, returnCode=False):
+        """
+        Проверяет электронную подпись.
+
+        :param cert_path: путь до файла с сертификатом
+        :param file_path: путь до подписываемого файла
+        :param data_path: путь до файла в который будут записаны данные
+        :param errchain: кидать ошибку если не удалось проверить цепочку сертификатов
+        :param norev: не проверять сертификаты в цепочке на предмет отозванности
+        :param dn: строки для поиска в RDN
+        :param returnCode: возвращать код вместо данных о подписанте
+        """
+
+        args = [file_path, data_path]
+
+        if errchain:
+            args.append('-errchain')
+        else:
+            args.append('-nochain')
+
+        if norev:
+            args.append('-norev')
+
+        if dn is not None:
+            args.append('-dn \'{}\''.format(dn))
+
+        kwargs = {
+            'f': os.path.join(cert_path)
+        }
+
+        stdout = self.run_command('-verify', *args, **kwargs)
+        if returnCode:
+            return self._get_result_code(stdout)
+        return self._get_signer_data(stdout)
 
     def _get_signer_data(self, stdout):
         pattern = r'Signer: (.*)'
